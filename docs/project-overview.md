@@ -81,6 +81,7 @@ _old/             이전 설정 보관(참고용, 사용 안 함)
 | Notification | 서버가 만드는 알림 | `isRead` |
 
 ### 관계
+> 그림으로 보기: [erd.md](erd.md) · 서버 실행 후 `http://localhost:3000/erd.html`
 ```
 User 1─N Job (사장님)        User 1─N Resume (알바생)
 User 1─N Application(지원자)  User 1─N Notification

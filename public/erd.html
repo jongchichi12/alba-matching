@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>알바 매칭 ERD</title>
+<link rel="icon" href="data:,">
+<style>
+  body { margin: 0; font: 14px/1.6 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; background: #fff; color: #1d2330; }
+  main { max-width: 1500px; margin: 0 auto; padding: 18px 16px 50px; }
+  .mermaid svg { max-width: 100%; height: auto; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: #6b7280; margin-bottom: 14px; }
+  .legend { margin: 12px 0; padding: 10px 14px; background: #f5f6f8; border-radius: 8px; }
+  .legend li { margin: 2px 0; }
+  #erd { overflow-x: auto; }
+  a { color: #2f6fed; }
+</style>
+</head>
+<body>
+<main>
+  <h1>알바 매칭 ERD</h1>
+  <div class="sub">models/*.js 기준 · <a href="/">서비스 화면으로</a></div>
+  <pre class="mermaid" id="erd">
+erDiagram
+    USER ||--o{ JOB : "공고 등록 (ownerId)"
+    USER ||--o{ RESUME : "이력서 작성 (userId)"
+    USER ||--o{ APPLICATION : "지원 (applicantId)"
+    USER ||--o{ NOTIFICATION : "알림 수신 (userId)"
+    USER ||--o{ PAYROLL : "정산서 발행 (ownerId)"
+    USER ||--o{ PAYROLL : "정산서 수령 (workerId)"
+    USER ||--o{ REVIEW : "후기 작성 (authorId)"
+    USER ||--o{ REVIEW : "평판 수신 (ownerId)"
+    JOB ||--o{ APPLICATION : "받은 지원"
+    RESUME |o--o{ APPLICATION : "지원에 사용 (삭제 시 NULL)"
+    APPLICATION ||--o{ SHIFT : "근무 일정"
+    APPLICATION ||--o{ PAYROLL : "정산"
+    APPLICATION ||--o| REVIEW : "후기 (지원당 1개)"
+
+    USER {
+        int id PK
+        string email UK
+        string password "bcrypt 해시"
+        string name
+        string phone
+    }
+    JOB {
+        int id PK
+        int ownerId FK
+        string title
+        string category
+        string region
+        int pay "시급"
+        int headcount "모집 인원"
+        string status "open / closed"
+    }
+    RESUME {
+        int id PK
+        int userId FK
+        string title
+        text intro
+        string desiredRegion
+    }
+    APPLICATION {
+        int id PK
+        int jobId FK
+        int resumeId FK "NULL 허용"
+        int applicantId FK
+        string status "pending / accepted / completed / rejected"
+        string message
+        int ownerRating "성실도 1~5"
+        datetime acceptedAt
+        datetime completedAt
+    }
+    SHIFT {
+        int id PK
+        int applicationId FK
+        datetime startAt
+        datetime endAt
+        datetime checkInAt
+        datetime checkOutAt
+        int workedMinutes
+        string status "scheduled / checked_in / checked_out / confirmed / no_show"
+    }
+    PAYROLL {
+        int id PK
+        int applicationId FK
+        int ownerId FK
+        int workerId FK
+        date periodStart
+        date periodEnd
+        int totalMinutes
+        int hourlyPay "발행 시점 시급"
+        int basePay
+        int weeklyHolidayPay
+        int totalPay
+        string status "issued / paid / disputed"
+        string disputeReason
+        datetime paidAt
+    }
+    REVIEW {
+        int id PK
+        int applicationId FK "UK"
+        int authorId FK
+        int ownerId FK
+        int score "1~5"
+        text content
+    }
+    NOTIFICATION {
+        int id PK
+        int userId FK
+        string type
+        string message
+        int targetId "관련 지원·일정·정산서·후기 id"
+        boolean isRead
+    }
+  </pre>
+  <ul class="legend">
+    <li><b>USER</b>가 중심입니다. 사장님·알바생 구분 없이 한 종류이고, 행동으로 역할이 정해집니다.</li>
+    <li><b>APPLICATION(지원)</b>이 공고와 이력서를 잇는 N:M 연결이면서, Shift·Payroll·Review가 모두 여기에 달립니다.</li>
+    <li>1:1은 <b>Application — Review</b> 하나뿐입니다 (<code>applicationId</code> UNIQUE).</li>
+    <li>Payroll·Review는 User를 두 번 가리킵니다 (발행자/수령자, 작성자/평판 대상).</li>
+    <li>표기: <code>||</code> 정확히 1 · <code>o|</code> 0 또는 1 · <code>o{</code> 0개 이상 · PK 기본키 · FK 외래키 · UK 유일</li>
+  </ul>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', er: { useMaxWidth: true, layoutDirection: 'LR' } });
+</script>
+</body>
+</html>
