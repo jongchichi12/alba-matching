@@ -12,7 +12,12 @@ const FAIL = body => { expect(body.result).to.equal('Fail'); expect(body.error).
 const day = (y, m, d, h = 9) => new Date(y, m - 1, d, h, 0);   // 로컬 시간
 
 describe('API: /users', () => {
-    before(resetDb);
+    let agent;   // 아래 it 들이 순서대로 같은 세션(가입 → 로그인 → me → 로그아웃)을 이어 쓴다
+
+    before(async () => {
+        await resetDb();
+        agent = request.agent(require('../app'));
+    });
 
     it('POST /users/join - 400 이메일 형식 오류', async () => {
         const res = await request(require('../app')).post('/users/join').send({ email: 'abc', password: 'pass1234', name: '가나다' });
@@ -20,27 +25,33 @@ describe('API: /users', () => {
         FAIL(res.body);
     });
 
-    it('가입·로그인·me·로그아웃', async () => {
-        const agent = request.agent(require('../app'));
+    it('POST /users/join - 201 가입(비밀번호는 응답에 없음), 409 중복 이메일', async () => {
         let res = await agent.post('/users/join').send({ email: 'a@test.com', password: 'pass1234', name: '가나다', phone: '010-1111-2222' });
         expect(res.status).to.equal(201);
         expect(res.body.data).to.not.have.property('password');
 
         res = await agent.post('/users/join').send({ email: 'a@test.com', password: 'pass1234', name: '중복' });
         expect(res.status).to.equal(409);
+    });
 
-        res = await agent.post('/users/login').send({ email: 'a@test.com', password: 'wrong' });
+    it('POST /users/login - 401 비밀번호 틀림, 200 로그인, 400 이미 로그인한 상태', async () => {
+        let res = await agent.post('/users/login').send({ email: 'a@test.com', password: 'wrong' });
         expect(res.status).to.equal(401);
 
         res = await agent.post('/users/login').send({ email: 'a@test.com', password: 'pass1234' });
         expect(res.status).to.equal(200);
         res = await agent.post('/users/login').send({ email: 'a@test.com', password: 'pass1234' });
-        expect(res.status).to.equal(400);   // 이미 로그인한 상태
+        expect(res.status).to.equal(400);
+    });
 
-        res = await agent.get('/users/me');
+    it('GET /users/me - 로그인한 사용자 정보', async () => {
+        const res = await agent.get('/users/me');
+        expect(res.status).to.equal(200);
         expect(res.body.data.email).to.equal('a@test.com');
+    });
 
-        res = await agent.post('/users/logout');
+    it('POST /users/logout - 200, 로그아웃 후 /users/me 는 401', async () => {
+        let res = await agent.post('/users/logout');
         expect(res.status).to.equal(200);
         res = await agent.get('/users/me');
         expect(res.status).to.equal(401);
@@ -398,18 +409,27 @@ describe('API: /applications', () => {
         });
     });
 
-    describe('GET /applications/sent, /received', () => {
-        it('sent: 상태 필터, received: 내 공고만·jobId 필터', async () => {
-            const app1 = await createApplication(job.id, worker.user.id, resume.id);
+    describe('GET /applications/sent', () => {
+        it('내가 지원한 것만, 상태 필터, 400 잘못된 상태값', async () => {
+            await createApplication(job.id, worker.user.id, resume.id);
             await createApplication(job.id, worker2.user.id, resume2.id, { status: 'rejected' });
 
             let res = await worker.agent.get('/applications/sent');
+            expect(res.status).to.equal(200);
             expect(res.body.data).to.have.length(1);
             res = await worker.agent.get('/applications/sent').query({ status: 'accepted' });
             expect(res.body.data).to.have.length(0);
             expect((await worker.agent.get('/applications/sent').query({ status: 'bad' })).status).to.equal(400);
+            expect((await request(require('../app')).get('/applications/sent')).status).to.equal(401);
+        });
+    });
 
-            res = await boss.agent.get('/applications/received');
+    describe('GET /applications/received', () => {
+        it('내 공고로 온 지원만, 상태·jobId 필터', async () => {
+            const app1 = await createApplication(job.id, worker.user.id, resume.id);
+            await createApplication(job.id, worker2.user.id, resume2.id, { status: 'rejected' });
+
+            let res = await boss.agent.get('/applications/received');
             expect(res.body.data).to.have.length(2);
             res = await boss.agent.get('/applications/received').query({ status: 'pending', jobId: job.id });
             expect(res.body.data.map(a => a.id)).to.deep.equal([app1.id]);
@@ -576,33 +596,35 @@ describe('API: /reviews', () => {
             await worker2.agent.post('/reviews').send({ applicationId: pendingApp.id, score: 3 });
         });
 
-        it('사장님별 목록(공개)과 평균 평점', async () => {
-            const app = require('../app');
-            let res = await request(app).get(`/reviews/owners/${boss.user.id}`);
+        it('GET /reviews/owners/:ownerId - 사장님별 후기 목록(비로그인도 조회), 404 없는 사용자', async () => {
+            const res = await request(require('../app')).get(`/reviews/owners/${boss.user.id}`);
             expect(res.status).to.equal(200);
             expect(res.body.data.total).to.equal(2);
             expect(res.body.data.reviews[0].author.name).to.be.a('string');
-
-            res = await request(app).get(`/reviews/owners/${boss.user.id}/score`);
-            expect(res.body.data.avgScore).to.equal(4);
-            expect(res.body.data.count).to.equal(2);
+            expect((await request(require('../app')).get('/reviews/owners/99999')).status).to.equal(404);
         });
 
-        it('404 없는 사용자', async () => {
-            expect((await request(require('../app')).get('/reviews/owners/99999')).status).to.equal(404);
+        it('GET /reviews/owners/:ownerId/score - 평균 평점·후기 수, 404 없는 사용자', async () => {
+            const res = await request(require('../app')).get(`/reviews/owners/${boss.user.id}/score`);
+            expect(res.status).to.equal(200);
+            expect(res.body.data.avgScore).to.equal(4);
+            expect(res.body.data.count).to.equal(2);
             expect((await request(require('../app')).get('/reviews/owners/99999/score')).status).to.equal(404);
         });
 
-        it('작성자만 수정·삭제(403), 삭제하면 평점에서 빠진다', async () => {
+        it('PATCH /reviews/:id - 작성자만(403), 400 평점 오류, 200 수정', async () => {
             expect((await other.agent.patch(`/reviews/${review.id}`).send({ score: 1 })).status).to.equal(403);
             expect((await worker.agent.patch(`/reviews/${review.id}`).send({ score: 9 })).status).to.equal(400);
-            let res = await worker.agent.patch(`/reviews/${review.id}`).send({ score: 4, content: '수정' });
+            const res = await worker.agent.patch(`/reviews/${review.id}`).send({ score: 4, content: '수정' });
+            expect(res.status).to.equal(200);
             expect(res.body.data.score).to.equal(4);
+        });
 
+        it('DELETE /reviews/:id - 작성자만(403), 삭제하면 평점에서 빠진다', async () => {
             expect((await other.agent.delete(`/reviews/${review.id}`)).status).to.equal(403);
             expect((await worker.agent.delete(`/reviews/${review.id}`)).status).to.equal(200);
 
-            res = await request(require('../app')).get(`/reviews/owners/${boss.user.id}/score`);
+            const res = await request(require('../app')).get(`/reviews/owners/${boss.user.id}/score`);
             expect(res.body.data.count).to.equal(1);
             expect(res.body.data.avgScore).to.equal(3);
         });
@@ -851,10 +873,17 @@ describe('API: /payrolls', () => {
             payroll = (await issue(boss.agent, app.id)).body.data;
         });
 
-        it('listMine(알바생)·listIssued(사장님)', async () => {
-            expect((await worker.agent.get('/payrolls/me')).body.data).to.have.length(1);
-            expect((await boss.agent.get('/payrolls/issued')).body.data).to.have.length(1);
+        it('GET /payrolls/me - 알바생이 받은 정산서만', async () => {
+            const res = await worker.agent.get('/payrolls/me');
+            expect(res.status).to.equal(200);
+            expect(res.body.data).to.have.length(1);
             expect((await boss.agent.get('/payrolls/me')).body.data).to.have.length(0);
+        });
+
+        it('GET /payrolls/issued - 사장님이 발행한 정산서만', async () => {
+            const res = await boss.agent.get('/payrolls/issued');
+            expect(res.status).to.equal(200);
+            expect(res.body.data).to.have.length(1);
             expect((await worker.agent.get('/payrolls/issued')).body.data).to.have.length(0);
         });
 
@@ -928,25 +957,39 @@ describe('API: /notifications', () => {
         expect((await request(require('../app')).get('/notifications/unread-count')).status).to.equal(401);
     });
 
-    it('목록 필터(unread), read-all, 삭제', async () => {
-        const app2 = require('../app');
+    // 아래 4개는 같은 데이터(알바생 알림 3건)를 순서대로 이어 쓴다
+    it('GET /notifications - 내 알림 목록, unread=true 필터', async () => {
         await db.Notification.bulkCreate([
             { userId: worker.user.id, type: 'shift_created', message: 'a' },
             { userId: worker.user.id, type: 'shift_created', message: 'b' },
             { userId: worker.user.id, type: 'shift_created', message: 'c', isRead: true }
         ]);
-        expect((await worker.agent.get('/notifications')).body.data).to.have.length(3);
+        const res = await worker.agent.get('/notifications');
+        expect(res.status).to.equal(200);
+        expect(res.body.data).to.have.length(3);
         expect((await worker.agent.get('/notifications').query({ unread: 'true' })).body.data).to.have.length(2);
+    });
 
-        const all = await worker.agent.patch('/notifications/read-all');
-        expect(all.body.data.updated).to.equal(2);
+    it('PATCH /notifications/:id/read - 내 알림 하나 읽음 처리', async () => {
+        const target = (await worker.agent.get('/notifications').query({ unread: 'true' })).body.data[0];
+        const res = await worker.agent.patch(`/notifications/${target.id}/read`);
+        expect(res.status).to.equal(200);
+        expect(res.body.data.isRead).to.equal(true);
+        expect((await worker.agent.get('/notifications/unread-count')).body.data.count).to.equal(1);
+    });
+
+    it('PATCH /notifications/read-all - 내 안 읽은 알림만 모두 읽음 (남의 알림은 그대로)', async () => {
+        const res = await worker.agent.patch('/notifications/read-all');
+        expect(res.status).to.equal(200);
+        expect(res.body.data.updated).to.equal(1);
         expect((await worker.agent.get('/notifications/unread-count')).body.data.count).to.equal(0);
-        expect((await boss.agent.get('/notifications')).body.data.length).to.be.greaterThan(0);   // 남의 알림은 건드리지 않는다
+        expect((await boss.agent.get('/notifications')).body.data.length).to.be.greaterThan(0);
+    });
 
+    it('DELETE /notifications/:id - 내 알림 삭제', async () => {
         const target = (await worker.agent.get('/notifications')).body.data[0];
         expect((await worker.agent.delete(`/notifications/${target.id}`)).status).to.equal(200);
         expect((await worker.agent.get('/notifications')).body.data).to.have.length(2);
-        void app2;
     });
 });
 
