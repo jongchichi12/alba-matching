@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
 dotenv.config();            // models 보다 위에서 불러야 .env 값이 먼저 올라온다
 
+const path = require('path');
 const express = require('express');
 const morgan = require('morgan');
 const session = require('express-session');
@@ -38,6 +39,9 @@ app.use(session({
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// 시연용 API 콘솔 (public/index.html). 같은 주소에서 열려야 세션 쿠키가 붙는다
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/users', usersRouter);                  // 회원 관리 (라우터 개수 제외)
 app.use('/jobs', jobsRouter);                    // 공고
