@@ -14,5 +14,13 @@
     "host": "127.0.0.1",
     "dialect": "mysql",
     "logging": false
+  },
+  "demo": {
+    "username": "root",
+    "password": "YOUR_DB_PASSWORD",
+    "database": "sample_demo",
+    "host": "127.0.0.1",
+    "dialect": "mysql",
+    "logging": false
   }
 }
