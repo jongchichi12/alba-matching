@@ -36,6 +36,22 @@ npm test                                # 전체 (test-unit / test-api 로 분�
 
 환경 변수(`.env`): `PORT`(기본 3000), `SECRET`(세션 비밀키).
 
+### 기존 실행 vs 데모 실행
+
+코드는 같고, `NODE_ENV` 값에 따라 `config/config.json` 에서 읽는 환경(= 붙는 DB)만 달라집니다 (`models/index.js`).
+
+| 구분 | 실행 명령 (PowerShell) | NODE_ENV | DB | 용도 |
+|---|---|---|---|---|
+| 기존 | `npm start` | (없음 → `development`) | `sample` | 개발·기존 데이터 |
+| 데모 | `$env:NODE_ENV='demo'; npm start` | `demo` | `sample_demo` | 알바생 시점 시연 (사장님 5명, 공고 18개) |
+| 테스트 | `npm test` | `test` | `sample` | 자동 테스트 (시작 시 테이블 초기화) |
+
+- 데모 DB 만들기/초기화: `node scripts/seed-demo.js` (DB 가 없으면 만들고, 있으면 비운 뒤 다시 채움)
+- 데모 사장님 계정: `cafe@demo.com`, `cvs@demo.com`, `food@demo.com`, `event@demo.com`, `edu@demo.com` (비밀번호 모두 `demo1234`)
+- 알바생 계정은 데모로 띄운 뒤 화면에서 직접 가입. DB 가 서로 달라서 `sample` 의 계정은 데모에 없음
+- `$env:NODE_ENV` 는 그 PowerShell 창에서만 유효. 환경을 바꿔 재시작하면 로그아웃 후 다시 로그인
+- `config.json` 에 `demo` 환경이 필요 (`config.example.json` 에 포함)
+
 ## 3. 폴더 구조
 
 ```
