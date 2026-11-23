@@ -30,9 +30,15 @@ const jobSpec = {
 // region 은 부분 일치(LIKE), category 는 정확히 일치, minPay 는 이상, status 기본값은 open
 exports.list = async (req, res, next) => {
     try {
-        const { region, category, minPay, status = 'open' } = req.query;
+        const { region, category, minPay, mine, status = 'open' } = req.query;
         const { page, limit, offset } = pageOf(req.query);
         const where = {};
+
+        // ?mine=true : 내가 올린 공고만 (로그인 필요)
+        if (mine === 'true') {
+            if (!req.user) throw new HttpError(401, '로그인이 필요합니다.');
+            where.ownerId = req.user.id;
+        }
 
         if (status !== 'all') {
             if (!['open', 'closed'].includes(status))

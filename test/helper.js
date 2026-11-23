@@ -1,4 +1,4 @@
-// 테스트 공통 도구. 모든 테스트 파일은 첫 줄에 NODE_ENV='test' 를 넣어 models 가 test DB(alba_test)를 쓰게 한다
+// 테스트 공통 도구. 모든 테스트 파일은 첫 줄에 NODE_ENV='test' 를 넣어 models 가 DB(sample)를 쓰게 한다
 process.env.NODE_ENV = 'test';
 
 const request = require('supertest');

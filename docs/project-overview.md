@@ -22,15 +22,14 @@
 | 개발 도구 | `nodemon` (`npm start`), `sequelize-cli` |
 | 테스트 | `mocha` + `chai` + `supertest` |
 
-프론트엔드는 없고 JSON REST API만 제공합니다. 스키마는 `sequelize.sync()`로 만들어지며(마이그레이션 파일 없음), `NODE_ENV=test`에서는 테스트가 `sync({ force: true })`로 초기화합니다.
+백엔드는 JSON REST API이고, 같은 서버가 `public/` 의 프론트(서비스 화면 `index.html` + 시연용 API 콘솔 `console.html`)를 정적으로 제공합니다. 프론트는 프레임워크·빌드 없이 바닐라 JS(ES 모듈)로 만들었습니다 (9장). 스키마는 `sequelize.sync()`로 만들어지며(마이그레이션 파일 없음), `NODE_ENV=test`에서는 테스트가 `sync({ force: true })`로 초기화합니다.
 
 ## 2. 실행 방법
 
 ```bash
 npm install
 # config/config.example.json → config/config.json 으로 복사 후 DB 계정 수정
-npx sequelize db:create                 # alba_dev
-npx sequelize db:create --env test      # alba_test
+npx sequelize db:create                 # sample
 npm start                               # http://localhost:3000
 npm test                                # 전체 (test-unit / test-api 로 분리 실행 가능)
 ```
@@ -107,7 +106,7 @@ Application 1─1 Review
 ### 공고 `/jobs`
 | API | 설명 |
 |---|---|
-| GET `/` ★ | 목록. 필터 `region`(부분 일치)·`category`·`minPay`·`status`(기본 open, `all` 가능), 페이지네이션 |
+| GET `/` ★ | 목록. 필터 `region`(부분 일치)·`category`·`minPay`·`status`(기본 open, `all` 가능)·`mine=true`(내 공고만, 로그인 필요, 비로그인 401), 페이지네이션 |
 | GET `/:id` | 상세 (확정 인원 `confirmedCount` 포함) |
 | POST `/` | 등록 (시급은 **2026 최저임금 10,320원 이상**) |
 | PATCH `/:id` | 수정 (작성자만, 확정 인원보다 모집인원을 줄일 수 없음) |
@@ -195,9 +194,47 @@ Application 1─1 Review
 - **이력서 req 이름**: `req.resume`은 Node 내장 `IncomingMessage.resume()`과 충돌하므로 `req.resumeDoc` 사용
 - **마감 공고 확정**: 정원 마감과 사장님 조기 마감을 구분하지 않고, 마감된 공고의 대기 지원은 accept 시 409
 
-## 9. 시연용 API 콘솔 (`public/index.html`)
+## 9. 프론트엔드 (`public/`)
 
-`npm start` 후 브라우저에서 `http://localhost:3000` 을 열면 모든 API를 직접 실행할 수 있는 콘솔이 뜹니다. (`app.js` 의 `express.static('public')` 으로 같은 주소에서 제공 → 세션 쿠키가 그대로 동작)
+`npm start` 후 `http://localhost:3000` 을 열면 서비스 화면이, `http://localhost:3000/console.html` 을 열면 시연용 API 콘솔이 뜹니다. 둘 다 `app.js` 의 `express.static('public')` 으로 같은 주소에서 제공되므로 세션 쿠키가 그대로 동작합니다.
+
+### 9-1. 서비스 화면 (`index.html`)
+
+기능 중심의 단순한 화면입니다. 프레임워크 없이 해시 라우팅(`#/jobs/3`) + ES 모듈로 구성했고, 사장님/알바생은 한 계정이 둘 다 할 수 있으므로 상단 메뉴가 **공통 / 알바생 / 사장님** 그룹으로 나뉩니다. 로그인하면 알림 개수가 30초마다 갱신됩니다.
+
+```
+public/
+  index.html          셸 (헤더 + main)
+  css/app.css
+  js/
+    app.js            해시 라우터, 헤더, 알림 배지, 오류 처리
+    api.js            fetch 래퍼 (성공이면 data, 실패면 ApiError)
+    ui.js             h`` 안전 템플릿(자동 이스케이프), 포맷터, 토스트, data-act / data-form 이벤트 위임
+    state.js          로그인 사용자, 이동 도우미
+    views/            jobs · applications · resumes · shifts · money(정산·후기) · misc(로그인·알림)
+  console.html        시연용 API 콘솔
+```
+
+| 화면 | 해시 | 누가 | 사용하는 API |
+|---|---|---|---|
+| 공고 찾기 / 상세 | `#/jobs`, `#/jobs/:id` | 누구나 | `GET /jobs`, `GET /jobs/:id` |
+| 로그인 · 가입 | `#/login`, `#/join` | 비로그인 | `POST /users/login·join·logout`, `GET /users/me` |
+| 지원하기 · 내 지원 · 후기 쓰기 | `#/jobs/:id`, `#/applications` | 알바생 | `POST /applications`, `GET /applications/sent`, `POST /reviews` |
+| 이력서 · 인증 경력 | `#/resumes`, `#/resumes/new`, `#/resumes/:id`, `#/resumes/:id/edit` | 알바생(경력은 지원받은 사장님도) | `/resumes` 6개 |
+| 내 근무 (출·퇴근) | `#/shifts` | 알바생 | `GET /shifts/me`, `PATCH …/check-in·check-out` |
+| 받은 정산서 · 이의제기 | `#/payrolls`, `#/payrolls/:id` | 알바생 | `GET /payrolls/me·:id`, `PATCH …/dispute` |
+| 공고 등록 · 수정 · 마감 · 삭제 | `#/jobs/new`, `#/jobs/:id/edit`, `#/my-jobs` | 사장님 | `/jobs` 쓰기 API, `GET /jobs?mine=true` |
+| 받은 지원 (확정·거절·완료+평점) | `#/applicants` | 사장님 | `GET /applications/received`, `PATCH …/accept·reject·complete` |
+| 근무 관리 (일정 등록·확인·결근) | `#/shifts/manage?jobId=` | 사장님 | `POST /shifts`, `GET /shifts/jobs/:jobId`, `PATCH …/confirm·no-show` |
+| 정산서 발행 · 지급 | `#/payrolls?tab=new·issued`, `#/payrolls/:id` | 사장님 | `POST /payrolls`, `GET /payrolls/issued`, `PATCH …/pay` |
+| 사장님 평판 · 후기 수정/삭제 | `#/owners/:id` | 누구나(수정·삭제는 작성자) | `GET /reviews/owners/:id·score`, `PATCH·DELETE /reviews/:id` |
+| 알림 | `#/notifications` | 로그인 | `/notifications` 5개 |
+
+서버 응답이 403·409 등으로 거절되면 서버의 오류 메시지가 그대로 토스트로 표시되고, 401 이면 로그인 화면으로 보냅니다. 화면은 규칙을 다시 구현하지 않고 상태에 맞는 버튼만 보여줍니다 (규칙의 최종 판단은 항상 서버).
+
+### 9-2. 시연용 API 콘솔 (`console.html`)
+
+모든 API를 직접 실행할 수 있는 콘솔입니다. (`app.js` 의 `express.static('public')` 으로 같은 주소에서 제공 → 세션 쿠키가 그대로 동작)
 
 - **라우터별 탭**: 8개 라우터, 45개 API를 카드로 표시. 카드마다 `routes → 미들웨어 체인 → 컨트롤러` 와 규칙 설명, 입력값, 실행 버튼
 - **▶ 시나리오 탭**
@@ -212,5 +249,5 @@ Application 1─1 Review
 ## 10. 테스트
 
 - `test/unit.js`: 로그인 미들웨어, 검증 유틸, 급여 계산 (DB 불필요)
-- `test/api.js`: 라우터별 통합 테스트(supertest) + 전체 업무 흐름 시나리오. 실행 전 `alba_test` DB 필요
+- `test/api.js`: 라우터별 통합 테스트(supertest) + 전체 업무 흐름 시나리오. 실행 전 `sample` DB 필요 (테스트는 시작할 때 테이블을 초기화하므로 데이터가 지워진다)
 - `test/helper.js`: 가입 + 로그인된 agent 생성 헬퍼

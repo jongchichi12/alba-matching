@@ -8,8 +8,7 @@
 ```bash
 npm install
 # MySQL 서버를 켠 뒤 config/config.json 의 username / password 를 본인 값으로 수정
-npx sequelize db:create                 # alba_dev
-npx sequelize db:create --env test      # alba_test
+npx sequelize db:create                 # sample
 npm start                               # http://localhost:3000  ("데이터베이스 연결 성공"이 뜨면 테이블이 만들어진 것)
 npm test                                # 전체 테스트 (npm run test-unit / test-api 로 나눠 실행)
 npx mocha --exit -f "/applications" test/api.js    # 라우터 하나만

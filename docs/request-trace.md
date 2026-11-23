@@ -107,7 +107,7 @@ router.patch('/:id/accept', isLoggedIn, isJobOwnerOfApplication, c.accept);
 | 파생 조회 | `GET /resumes/:id/careers` | 저장하지 않고 조회할 때마다 완료된 지원에서 **계산** |
 
 ## 콘솔로 직접 확인하기
-`http://localhost:3000` → **▶ 시나리오** 탭의 "권한·상태 규칙 시연" 에서
+`http://localhost:3000/console.html` → **▶ 시나리오** 탭의 "권한·상태 규칙 시연" 에서
 - 제3자가 남의 지원을 확정 → **403** (④ 에서 막힘)
 - 이미 확정된 지원을 다시 확정 → **409** (⑤ 에서 막힘)
 - 로그인 없이 지원 → **401** (③ 에서 막힘)

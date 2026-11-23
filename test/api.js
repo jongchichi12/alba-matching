@@ -102,6 +102,19 @@ describe('API: /jobs', () => {
             expect(res.body.data.page).to.equal(2);
         });
 
+        it('mine=true 는 내 공고만 (모든 상태), 비로그인은 401', async () => {
+            const app = require('../app');
+            let res = await boss.agent.get('/jobs').query({ mine: 'true', status: 'all' });
+            expect(res.status).to.equal(200);
+            expect(res.body.data.total).to.equal(4);
+
+            res = await other.agent.get('/jobs').query({ mine: 'true', status: 'all' });
+            expect(res.status).to.equal(200);
+            expect(res.body.data.total).to.equal(0);
+
+            expect((await request(app).get('/jobs').query({ mine: 'true' })).status).to.equal(401);
+        });
+
         it('400 잘못된 쿼리', async () => {
             const app = require('../app');
             expect((await request(app).get('/jobs').query({ status: 'zzz' })).status).to.equal(400);
